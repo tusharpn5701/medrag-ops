@@ -157,8 +157,7 @@ class FastEmbedRetriever(Retriever):
         if cache.exists():
             self.emb = np.load(cache)
             return self
-        parallel = 0 if len(texts) > 2000 else None  # 0 = one worker process per CPU core
-        vecs = np.array(list(self._model().passage_embed(texts, batch_size=64, parallel=parallel)), dtype=np.float32)
+        vecs = np.array(list(self._model().passage_embed(texts, batch_size=64)), dtype=np.float32)
         vecs /= np.linalg.norm(vecs, axis=1, keepdims=True) + 1e-9
         self.emb = vecs.astype(np.float16)
         cache_dir.mkdir(parents=True, exist_ok=True)
@@ -215,7 +214,7 @@ def build_retrievers(candidates: list[dict], texts: list[str], depth: int, log=p
         t0 = time.time()
         built[cand["name"]] = KINDS[cand["kind"]](cand["name"], cand).fit(texts)
         built[cand["name"]].fit_seconds = time.time() - t0
-        log(f"fitted {cand['name']} in {built[cand['name']].fit_seconds:.1f}s")
+        print(f"fitted {cand['name']} in {built[cand['name']].fit_seconds:.1f}s", flush=True)
     for cand in candidates:
         if cand["kind"] == "hybrid":
             cfg = {**cand, "candidate_depth": depth}

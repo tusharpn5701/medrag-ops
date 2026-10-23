@@ -115,7 +115,7 @@ def run_sweep(params: dict, only: list[str] | None = None, out_dir: Path = ARTIF
             for name, retriever in fitted.items():
                 t_eval = time.time()
                 metrics, per_query = evaluate_all(retriever, sets, chunk_pair)
-                log(f"evaluated {name} in {time.time() - t_eval:.1f}s")
+                eval_s = time.time() - t_eval
                 metrics["fit_seconds"] = retriever.fit_seconds
                 score = selection_score(metrics, params)
                 with mlflow.start_run(run_name=name, nested=True) as run:
@@ -125,13 +125,14 @@ def run_sweep(params: dict, only: list[str] | None = None, out_dir: Path = ARTIF
                     mlflow.log_dict(per_query, "per_query.json")
                 results.append({"name": name, "kind": retriever.kind, "run_id": run.info.run_id,
                                 "selection_score": score, "metrics": metrics})
-                log(f"  {name:<18} selection={score:.4f}  " + "  ".join(
+                log(f"{name}: selection={score:.4f} fit={retriever.fit_seconds:.0f}s eval={eval_s:.0f}s  " + "  ".join(
                     f"{k}={metrics[k]:.3f}" for k in ("medquad/recall@5", "liveqa_val/ndcg@10",
                                                        "liveqa_test/ndcg@10") if k in metrics))
             results.sort(key=lambda r: (r["selection_score"], r["metrics"].get("medquad/recall@5", 0)),
                          reverse=True)
             best = results[0]
             mlflow.set_tag("challenger", best["name"])
+            log(f"challenger: {best['name']} (selection {best['selection_score']:.4f})")
             mlflow.log_dict({"candidates": results, "skipped": skipped}, "candidates.json")
 
             bundle_dir = out_dir / "challenger"
@@ -143,7 +144,7 @@ def run_sweep(params: dict, only: list[str] | None = None, out_dir: Path = ARTIF
                         "monitoring": reference["thresholds"]}
             t_save = time.time()
             Bundle(manifest, chunks, fitted[best["name"]]).save(bundle_dir)
-            log(f"saved challenger bundle ({best['name']}) in {time.time() - t_save:.1f}s")
+            print(f"saved challenger bundle ({best['name']}) in {time.time() - t_save:.1f}s")
             # Reference queries travel with the model so monitoring can compare production against them
             with open(bundle_dir / "reference_queries.jsonl", "w") as f:
                 for row in reference["rows"]:

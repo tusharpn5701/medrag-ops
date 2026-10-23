@@ -72,7 +72,7 @@ def register_and_promote(params: dict, bundle_dir: Path = ARTIFACTS / "challenge
                 code_paths=[str(CODE_PATH)], pip_requirements=REQUIREMENTS,
                 registered_model_name=MODEL_NAME)
         version = str(info.registered_model_version)
-        log(f"logged and registered v{version} in {time.time() - t_up:.1f}s")
+        print(f"logged and registered v{version} in {time.time() - t_up:.1f}s", flush=True)
         set_role(client, "challenger", version)
         for k, v in chal_metrics.items():
             if isinstance(v, (int, float)):

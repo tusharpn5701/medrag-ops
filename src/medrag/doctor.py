@@ -49,7 +49,13 @@ def run_doctor(embed_sample: int = 500) -> int:
         from .tracking import MODEL_NAME, get_version_by_role
         c = MlflowClient()
         champ = get_version_by_role(c, "champion")
-        return f"{MODEL_NAME} champion = {'v' + champ.version if champ else 'none yet'}"
+        if not champ:
+            return f"{MODEL_NAME}: no champion yet"
+        t = champ.tags or {}
+        versions = len(c.search_model_versions(f"name='{MODEL_NAME}'"))
+        return (f"{MODEL_NAME} champion v{champ.version} = {t.get('retriever', '?')}, "
+                f"liveqa_test/ndcg@10 {t.get('metric.liveqa_test/ndcg_at_10', '?')}, "
+                f"medquad/recall@5 {t.get('metric.medquad/recall_at_5', '?')} ({versions} versions registered)")
 
     def bucket():
         from .logsink import _s3
