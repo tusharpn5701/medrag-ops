@@ -1,0 +1,7 @@
+*
+!pyproject.toml
+!README.md
+!src/
+!prompts/
+!artifacts/bundle/
+**/__pycache__

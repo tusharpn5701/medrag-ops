@@ -1,0 +1,50 @@
+# Every value here is tracked by DVC (dvc.yaml) and logged to MLflow with each run.
+
+data:
+  # MedQuAD subsets that ship with answers under CC BY 4.0. The three MedlinePlus
+  # subsets (A.D.A.M., Drugs, Herbs) had their answers removed for copyright and are excluded.
+  sources: [CancerGov, GARD, GHR, MPlusHealthTopics, NIDDK, NINDS, NIHSeniorHealth, NHLBI, CDC]
+  medquad_eval_size: 1000      # templated questions sampled for the known-item check
+  liveqa_val_fraction: 0.5     # LiveQA consumer questions split by question: val (tuning) / test (promotion)
+  seed: 13
+
+chunking:
+  max_words: 180
+  overlap_words: 40
+  header: focus_qtype          # prepend "<focus> | <question type>" to each chunk
+
+retrieval:
+  top_k: 5
+  candidate_depth: 50          # how many hits each member retriever passes to fusion
+  candidates:
+    - {name: bm25, kind: bm25, k1: 1.2, b: 0.75}
+    - {name: lsa-256, kind: lsa, dim: 256, min_df: 2}
+    - {name: bge-small, kind: fastembed, model: BAAI/bge-small-en-v1.5}
+    - {name: hybrid-bm25-lsa, kind: hybrid, members: [bm25, lsa-256], rrf_k: 60}
+    - {name: hybrid-bm25-bge, kind: hybrid, members: [bm25, bge-small], rrf_k: 60}
+
+selection:
+  metric: liveqa_val/ndcg@10   # picks the challenger among candidates
+
+promotion:
+  metric: liveqa_test/ndcg@10  # challenger must beat the champion on held-out questions
+  min_improvement: 0.0
+  guardrails:                  # and must not fall below these floors
+    medquad/recall@5: 0.70
+    liveqa_test/recall@10: 0.20
+
+generation:
+  base_url: https://api.groq.com/openai/v1
+  model: openai/gpt-oss-20b
+  prompt: prompts/answer_v1.yaml
+  max_tokens: 500
+  temperature: 0.1
+
+monitoring:
+  window_days: 7
+  min_queries: 30
+  drift_auc_threshold: 0.75     # domain-classifier ROC AUC above this = query drift
+  low_confidence_quantile: 0.10 # reference top-score quantile used as the "unsure" threshold
+  max_low_confidence_rate: 0.25
+  max_p95_latency_ms: 1500
+  max_error_rate: 0.02

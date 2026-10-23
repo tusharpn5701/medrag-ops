@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MedRAG Ops</title>
+<style>
+:root { --bg:#f4f6f7; --surface:#fff; --ink:#14212b; --ink-2:#4b5b66; --ink-3:#7a8891; --line:#dbe2e6; --accent:#0f6e8c; }
+@media (prefers-color-scheme: dark) { :root { --bg:#0f171c; --surface:#16222a; --ink:#e5edf1; --ink-2:#a9b8c1; --ink-3:#7d8d97; --line:#26353f; --accent:#4fb3d4; } }
+* { box-sizing:border-box } body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif }
+.wrap { max-width:860px; margin:0 auto; padding:40px max(16px,env(safe-area-inset-left)) 60px; display:grid; gap:22px }
+h1 { margin:0; font-size:36px; line-height:1.1 } p { margin:0; color:var(--ink-2) } a { color:var(--accent) }
+.links { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px }
+.links a { display:block; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:14px 16px; text-decoration:none; color:var(--ink) }
+.links a span { display:block; color:var(--ink-3); font-size:14px }
+ol { margin:0; padding-left:22px; color:var(--ink-2) } ol li { margin:6px 0 } code { font-size:14px }
+footer { color:var(--ink-3); font-size:14px }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div>
+    <h1>MedRAG Ops</h1>
+    <p>A medical question-answering service built on NIH's MedQuAD collection, with the MLOps loop around it: versioned data, tracked experiments, a gated model registry, CI/CD, monitoring and automated retraining.</p>
+  </div>
+  <div class="links">
+    <a href="https://medrag-ops.onrender.com/">Live demo<span>Ask a question (the free instance may take a minute to wake)</span></a>
+    <a href="monitoring/">Monitoring<span>Drift, confidence, latency, refreshed daily</span></a>
+    <a href="https://github.com/tusharpn5701/medrag-ops">Code<span>Pipeline, service, workflows, tests</span></a>
+    <a href="https://dagshub.com/tusharpn5701/medrag-ops/experiments">Experiments<span>MLflow runs and model registry</span></a>
+  </div>
+  <div>
+    <h2>How a model gets to production</h2>
+    <ol>
+      <li><b>Data:</b> <code>dvc repro</code> downloads MedQuAD (CC BY 4.0) and the TREC 2017 LiveQA-Med judgements, then builds 28,844 passages and three eval sets.</li>
+      <li><b>Train:</b> every candidate retriever (BM25, a corpus-trained LSA model, pretrained bge-small, and hybrids) is evaluated and logged to MLflow; the best on the validation split becomes the challenger.</li>
+      <li><b>Gate:</b> the challenger and the current champion are both re-scored on held-out real consumer questions; it is promoted only if it is better and passes the guardrails.</li>
+      <li><b>Deploy:</b> the champion is baked into a Docker image, smoke-tested under 512 MB, pushed to GHCR and rolled out on Render.</li>
+      <li><b>Monitor:</b> every request is logged; a daily job checks query drift, retrieval confidence and latency, and triggers retraining when production questions stop looking like the evaluation set.</li>
+    </ol>
+  </div>
+  <footer>Built by Tushar Purushothaman Namboodiri. Answers are general NIH information, not medical advice.</footer>
+</div>
+</body>
+</html>

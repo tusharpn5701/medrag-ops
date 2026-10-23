@@ -1,0 +1,93 @@
+name: Monitor
+
+# Daily: read the last 7 days of request logs, check drift / confidence / latency, publish
+# the dashboard to GitHub Pages (docs/monitoring) and trigger retraining when needed.
+on:
+  schedule:
+    - cron: "41 5 * * *"   # daily 05:41 UTC
+  workflow_dispatch:
+    inputs:
+      simulate:
+        description: Send this many simulated questions to the live API first (0 = none)
+        required: false
+        default: "0"
+      mix:
+        description: Simulated traffic mix
+        type: choice
+        options: [liveqa, mixed, medquad]
+        default: liveqa
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: monitor
+  cancel-in-progress: false
+
+env:
+  MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+  MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
+  MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
+  MEDRAG_LOG_BUCKET: ${{ secrets.MEDRAG_LOG_BUCKET }}
+  MEDRAG_S3_ENDPOINT_URL: ${{ secrets.MEDRAG_S3_ENDPOINT_URL }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  AWS_DEFAULT_REGION: us-east-1
+  MEDRAG_ADMIN_TOKEN: ${{ secrets.MEDRAG_ADMIN_TOKEN }}
+  PUBLIC_URL: ${{ vars.MEDRAG_PUBLIC_URL }}
+  MLFLOW_DISABLE_AGENT_HINT: "1"
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -e ".[train]"
+      - name: Export the champion (reference queries + thresholds)
+        run: medrag export --role champion --out artifacts/bundle
+      - name: Simulated traffic (manual runs only)
+        if: github.event.inputs.simulate != '' && github.event.inputs.simulate != '0' && env.PUBLIC_URL != ''
+        run: |
+          curl -s --max-time 90 "$PUBLIC_URL/health" || true   # wake the free instance
+          medrag simulate --url "$PUBLIC_URL" --n "${{ github.event.inputs.simulate }}" --mix "${{ github.event.inputs.mix }}"
+      - name: Flush buffered logs from the live API
+        if: env.PUBLIC_URL != '' && env.MEDRAG_ADMIN_TOKEN != ''
+        run: curl -s -X POST -H "x-admin-token: $MEDRAG_ADMIN_TOKEN" "$PUBLIC_URL/admin/flush" || true
+      - name: Build the monitoring report
+        id: report
+        run: |
+          medrag monitor --out docs/monitoring | tee monitor.json
+          echo "retrain=$(python -c "import json; print(str(json.load(open('docs/monitoring/report.json'))['retrain_recommended']).lower())")" >> "$GITHUB_OUTPUT"
+          python - >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          import json
+          r = json.load(open("docs/monitoring/report.json"))
+          print(f"### Monitoring: {r['status']}\n")
+          print(f"- queries in window: {r['n_queries']} ({r['n_simulated']} simulated)")
+          for x in r["reasons"] + r["alerts"]:
+              print(f"- {x}")
+          EOF
+      - name: Publish the dashboard
+        run: |
+          git config user.name "medrag-monitor[bot]"
+          git config user.email "medrag-monitor@users.noreply.github.com"
+          git add docs/monitoring
+          git diff --cached --quiet || git commit -m "monitoring: $(date -u +%F) report [skip ci]"
+          git push
+      - name: Trigger retraining (at most once every 3 days)
+        if: steps.report.outputs.retrain == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          last=$(gh run list --workflow train.yml --limit 1 --json createdAt -q '.[0].createdAt' || true)
+          if [ -n "$last" ] && [ $(( $(date +%s) - $(date -d "$last" +%s) )) -lt 259200 ]; then
+            echo "Training ran at $last, within the 3-day cooldown" >> "$GITHUB_STEP_SUMMARY"
+          else
+            gh workflow run train.yml -f reason="monitor: $(python -c "import json; print('; '.join(json.load(open('docs/monitoring/report.json'))['reasons']))")"
+            echo "Retraining triggered" >> "$GITHUB_STEP_SUMMARY"
+          fi

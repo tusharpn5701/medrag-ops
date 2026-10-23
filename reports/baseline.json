@@ -1,0 +1,11 @@
+{
+  "_comment": "Quality floor for pull requests: the BM25 retriever on the current data must not drop below these. Update deliberately when a change is meant to move them.",
+  "candidate": "bm25",
+  "tolerance": 0.01,
+  "metrics": {
+    "medquad/recall@5": 0.778,
+    "medquad/ndcg@10": 0.644,
+    "liveqa_val/ndcg@10": 0.233,
+    "liveqa_test/ndcg@10": 0.423
+  }
+}

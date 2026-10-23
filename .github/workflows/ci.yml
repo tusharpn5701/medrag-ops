@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["docs/**", "*.md"]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Lint and unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: ruff check src tests
+      - run: pytest
+
+  quality-gate:
+    name: Retrieval quality gate + image smoke test
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      MLFLOW_DISABLE_AGENT_HINT: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -e ".[train,dev]"
+      - uses: actions/cache@v4
+        with:
+          path: data/raw
+          key: medquad-raw-v1
+      - name: Build corpus and eval sets
+        run: medrag download && medrag prepare
+      - name: Train the baseline retriever (local MLflow)
+        run: medrag train --only bm25
+      - name: Fail if quality dropped below reports/baseline.json
+        run: medrag gate
+      - name: Job summary
+        if: always()
+        run: medrag summary >> "$GITHUB_STEP_SUMMARY"
+      - name: Build serving image
+        run: |
+          rm -rf artifacts/bundle && cp -r artifacts/challenger artifacts/bundle
+          docker build -t medrag-ops:ci .
+      - name: Smoke test inside Render's free-tier memory limit (512 MB)
+        run: |
+          docker run -d --name api --memory 512m -p 8000:8000 medrag-ops:ci
+          for i in $(seq 1 40); do curl -sf localhost:8000/health && break; sleep 2; done
+          echo
+          curl -sf -X POST localhost:8000/ask -H 'content-type: application/json' \
+            -d '{"query": "What causes kidney stones?"}' > ask.json
+          python -c "import json; d = json.load(open('ask.json')); assert d['sources'] and d['citations'], d; print(d['answer'][:300])"
+          docker stats --no-stream api
+          docker logs api | tail -5

@@ -1,0 +1,58 @@
+stages:
+  download:
+    cmd: medrag download
+    outs:
+      - data/raw:
+          persist: true
+
+  prepare:
+    cmd: medrag prepare
+    deps:
+      - data/raw
+      - src/medrag/data.py
+      - src/medrag/text.py
+    params:
+      - data
+      - chunking
+    outs:
+      - data/processed/chunks.jsonl
+      - data/processed/eval_medquad.jsonl
+      - data/processed/eval_liveqa_val.jsonl
+      - data/processed/eval_liveqa_test.jsonl
+    metrics:
+      - data/processed/stats.json:
+          cache: false
+
+  train:
+    cmd: medrag train
+    deps:
+      - data/processed/chunks.jsonl
+      - data/processed/eval_medquad.jsonl
+      - data/processed/eval_liveqa_val.jsonl
+      - data/processed/eval_liveqa_test.jsonl
+      - data/feedback/eval_production.jsonl
+      - src/medrag/retrieval.py
+      - src/medrag/evaluate.py
+      - src/medrag/train.py
+    params:
+      - retrieval
+      - selection
+      - monitoring.low_confidence_quantile
+    outs:
+      - artifacts/challenger
+    metrics:
+      - reports/challenger_metrics.json:
+          cache: false
+      - reports/candidates.json:
+          cache: false
+
+  register:
+    cmd: medrag register
+    deps:
+      - artifacts/challenger
+      - src/medrag/registry.py
+    params:
+      - promotion
+    metrics:
+      - reports/promotion.json:
+          cache: false

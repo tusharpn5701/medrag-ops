@@ -1,0 +1,89 @@
+name: Deploy
+
+# Packages the registry's champion into an image, tests it under 512 MB, pushes it to
+# GHCR and points Render at the new tag. Runs after a promotion or when serving code changes.
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: Why this deploy was started
+        required: false
+        default: manual
+  push:
+    branches: [main]
+    paths: ["src/**", "prompts/**", "Dockerfile", "pyproject.toml"]
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+  MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
+  MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
+  RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+  PUBLIC_URL: ${{ vars.MEDRAG_PUBLIC_URL }}
+  MLFLOW_DISABLE_AGENT_HINT: "1"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -e ".[train]"
+      - name: Export the champion bundle from the registry
+        id: model
+        run: |
+          if [ -z "$MLFLOW_TRACKING_URI" ]; then echo "::error::MLflow secrets are not set"; exit 1; fi
+          medrag export --role champion --out artifacts/bundle
+          echo "version=$(python -c "import json; print(json.load(open('artifacts/bundle/manifest.json'))['model_version'].split('/v')[-1])")" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+      - name: Build image
+        run: docker build -t "${{ steps.model.outputs.image }}:${{ github.sha }}" .
+      - name: Smoke test with 512 MB of memory
+        run: |
+          docker run -d --name api --memory 512m -p 8000:8000 "${{ steps.model.outputs.image }}:${{ github.sha }}"
+          for i in $(seq 1 40); do curl -sf localhost:8000/health && break; sleep 2; done
+          echo
+          curl -sf -X POST localhost:8000/ask -H 'content-type: application/json' \
+            -d '{"query": "Is Gaucher disease inherited?"}' | python -c "import json,sys; d=json.load(sys.stdin); assert d['citations']; print(d['answer'][:300])"
+          docker stats --no-stream api
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push tags (commit, model version, latest)
+        run: |
+          img="${{ steps.model.outputs.image }}"
+          docker tag "$img:${{ github.sha }}" "$img:model-v${{ steps.model.outputs.version }}"
+          docker tag "$img:${{ github.sha }}" "$img:latest"
+          docker push --all-tags "$img"
+      - name: Point Render at the new image
+        if: env.RENDER_DEPLOY_HOOK_URL != ''
+        run: |
+          tag=$(python -c "import urllib.parse; print(urllib.parse.quote('${{ steps.model.outputs.image }}:${{ github.sha }}', safe=''))")
+          curl -fsS -X POST "${RENDER_DEPLOY_HOOK_URL}&imgURL=${tag}"
+      - name: Wait until the new model is live
+        if: env.PUBLIC_URL != '' && env.RENDER_DEPLOY_HOOK_URL != ''
+        run: |
+          want="medrag-retriever/v${{ steps.model.outputs.version }}"
+          for i in $(seq 1 60); do
+            got=$(curl -s --max-time 30 "$PUBLIC_URL/health" | python -c "import json,sys; print(json.load(sys.stdin).get('model_version'))" 2>/dev/null || true)
+            echo "live: $got  wanted: $want"
+            [ "$got" = "$want" ] && exit 0
+            sleep 15
+          done
+          echo "::warning::Render has not switched to $want yet"
+      - name: Summary
+        run: |
+          echo "Deployed **medrag-retriever v${{ steps.model.outputs.version }}** as \`${{ steps.model.outputs.image }}:${{ github.sha }}\` (${{ github.event.inputs.reason || github.event_name }})" >> "$GITHUB_STEP_SUMMARY"

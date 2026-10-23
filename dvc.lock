@@ -1,0 +1,173 @@
+schema: '2.0'
+stages:
+  download:
+    cmd: medrag download
+    outs:
+    - path: data/raw
+      hash: md5
+      md5: 11badee66ba744226308891cc560deac.dir
+      size: 40596417
+      nfiles: 11280
+  prepare:
+    cmd: medrag prepare
+    deps:
+    - path: data/raw
+      hash: md5
+      md5: 11badee66ba744226308891cc560deac.dir
+      size: 40596417
+      nfiles: 11280
+    - path: src/medrag/data.py
+      hash: md5
+      md5: 32c2b8d4629936cffa0f8ff959d40870
+      size: 9779
+    - path: src/medrag/text.py
+      hash: md5
+      md5: 682914b5f7fe229633b7e37a78a757dc
+      size: 1587
+    params:
+      params.yaml:
+        chunking:
+          max_words: 180
+          overlap_words: 40
+          header: focus_qtype
+        data:
+          sources:
+          - CancerGov
+          - GARD
+          - GHR
+          - MPlusHealthTopics
+          - NIDDK
+          - NINDS
+          - NIHSeniorHealth
+          - NHLBI
+          - CDC
+          medquad_eval_size: 1000
+          liveqa_val_fraction: 0.5
+          seed: 13
+    outs:
+    - path: data/processed/chunks.jsonl
+      hash: md5
+      md5: cb32c5105ce2f0788d7a6744bc3737f1
+      size: 58114288
+    - path: data/processed/eval_liveqa_test.jsonl
+      hash: md5
+      md5: 72a497f16f36132fef856d6f1e9272b5
+      size: 9376
+    - path: data/processed/eval_liveqa_val.jsonl
+      hash: md5
+      md5: b76c2383cb5540d04e15d1b1b3fac9fb
+      size: 8961
+    - path: data/processed/eval_medquad.jsonl
+      hash: md5
+      md5: 6dc8ce1f04e5e41c43e2ae2bb5a32cdd
+      size: 140836
+    - path: data/processed/stats.json
+      hash: md5
+      md5: 8e0f2dd3f03d7ee15658c3e189e0a5f3
+      size: 243
+  train:
+    cmd: medrag train
+    deps:
+    - path: data/feedback/eval_production.jsonl
+      hash: md5
+      md5: d41d8cd98f00b204e9800998ecf8427e
+      size: 0
+    - path: data/processed/chunks.jsonl
+      hash: md5
+      md5: cb32c5105ce2f0788d7a6744bc3737f1
+      size: 58114288
+    - path: data/processed/eval_liveqa_test.jsonl
+      hash: md5
+      md5: 72a497f16f36132fef856d6f1e9272b5
+      size: 9376
+    - path: data/processed/eval_liveqa_val.jsonl
+      hash: md5
+      md5: b76c2383cb5540d04e15d1b1b3fac9fb
+      size: 8961
+    - path: data/processed/eval_medquad.jsonl
+      hash: md5
+      md5: 6dc8ce1f04e5e41c43e2ae2bb5a32cdd
+      size: 140836
+    - path: src/medrag/evaluate.py
+      hash: md5
+      md5: eea40dc88f3144daf80f71c08b91234a
+      size: 2649
+    - path: src/medrag/retrieval.py
+      hash: md5
+      md5: b9cb95fae1c4a8e558d61fcbd0a88806
+      size: 10183
+    - path: src/medrag/train.py
+      hash: md5
+      md5: a609032a28cba45dbaf1fe0417139e90
+      size: 7896
+    params:
+      params.yaml:
+        monitoring.low_confidence_quantile: 0.1
+        retrieval:
+          top_k: 5
+          candidate_depth: 50
+          candidates:
+          - name: bm25
+            kind: bm25
+            k1: 1.2
+            b: 0.75
+          - name: lsa-256
+            kind: lsa
+            dim: 256
+            min_df: 2
+          - name: bge-small
+            kind: fastembed
+            model: BAAI/bge-small-en-v1.5
+          - name: hybrid-bm25-lsa
+            kind: hybrid
+            members:
+            - bm25
+            - lsa-256
+            rrf_k: 60
+          - name: hybrid-bm25-bge
+            kind: hybrid
+            members:
+            - bm25
+            - bge-small
+            rrf_k: 60
+        selection:
+          metric: liveqa_val/ndcg@10
+    outs:
+    - path: artifacts/challenger
+      hash: md5
+      md5: b27b25077fc20412958dc5fdb983aacc.dir
+      size: 47585781
+      nfiles: 9
+    - path: reports/candidates.json
+      hash: md5
+      md5: 6fb7c99b42bd4f2d1e810850ac4134d5
+      size: 3672
+    - path: reports/challenger_metrics.json
+      hash: md5
+      md5: 6146004d17859785b526554aa6be0287
+      size: 685
+  register:
+    cmd: medrag register
+    deps:
+    - path: artifacts/challenger
+      hash: md5
+      md5: b27b25077fc20412958dc5fdb983aacc.dir
+      size: 47585781
+      nfiles: 9
+    - path: src/medrag/registry.py
+      hash: md5
+      md5: 9e0258831d9cd9d929c1edaa93e77974
+      size: 5424
+    params:
+      params.yaml:
+        promotion:
+          metric: liveqa_test/ndcg@10
+          min_improvement: 0.0
+          guardrails:
+            medquad/recall@5: 0.7
+            liveqa_test/recall@10: 0.2
+    outs:
+    - path: reports/promotion.json
+      hash: md5
+      md5: e68df2b8bec8cce4ab30c39f2c9d10d1
+      size: 803
