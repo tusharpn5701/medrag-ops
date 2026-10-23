@@ -12,6 +12,7 @@ from pathlib import Path
 from .config import ARTIFACTS, DATA_PROCESSED, REPORTS
 from .data import read_jsonl
 from .retrieval import Bundle
+from .text import ci_notice
 from .tracking import (
     CODE_PATH,
     MODEL_NAME,
@@ -54,7 +55,7 @@ def _decide(params: dict, chal: dict, champ: dict | None, data_changed: bool = F
     return ok, reasons
 
 
-def register_and_promote(params: dict, bundle_dir: Path = ARTIFACTS / "challenger", log=print) -> dict:
+def register_and_promote(params: dict, bundle_dir: Path = ARTIFACTS / "challenger", log=ci_notice) -> dict:
     chunks_pair = [c["pair_id"] for c in read_jsonl(DATA_PROCESSED / "chunks.jsonl")]
     sets = {k: v for k, v in load_eval_sets().items() if k in ("medquad", "liveqa_test", "prod_val")}
     challenger = Bundle.load(bundle_dir)
@@ -64,12 +65,14 @@ def register_and_promote(params: dict, bundle_dir: Path = ARTIFACTS / "challenge
         from mlflow import MlflowClient
         client = MlflowClient()
         mlflow.set_experiment("medrag-retrieval")
+        t_up = time.time()
         with mlflow.start_run(run_id=challenger.manifest["run_id"]):
             info = mlflow.pyfunc.log_model(
                 artifact_path="model", python_model=_pyfunc_class()(), artifacts={"bundle": str(bundle_dir)},
                 code_paths=[str(CODE_PATH)], pip_requirements=REQUIREMENTS,
                 registered_model_name=MODEL_NAME)
         version = str(info.registered_model_version)
+        log(f"logged and registered v{version} in {time.time() - t_up:.1f}s")
         set_role(client, "challenger", version)
         for k, v in chal_metrics.items():
             if isinstance(v, (int, float)):

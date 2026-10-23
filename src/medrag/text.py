@@ -54,3 +54,11 @@ def sentences(text: str) -> list[str]:
     for part in _SENT.split(text or ""):
         out += [p.strip() for p in _BULLET.split(part) if p.strip()]
     return out
+
+
+def ci_notice(message: str, title: str = "medrag") -> None:
+    """Print to stdout, and as a GitHub Actions annotation when running in CI (readable via the API)."""
+    import os
+    print(message, flush=True)
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        print(f"::notice title={title}::{message}", flush=True)

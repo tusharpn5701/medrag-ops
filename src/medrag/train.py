@@ -16,6 +16,7 @@ from .config import ARTIFACTS, DATA_PROCESSED, FEEDBACK_FILE, REPORTS
 from .data import read_jsonl
 from .evaluate import evaluate
 from .retrieval import Bundle, HybridRetriever, build_retrievers
+from .text import ci_notice
 from .tracking import flatten, mlflow_ctx
 
 EVAL_SETS = {  # name -> (file, relevance threshold for recall/MRR)
@@ -73,7 +74,7 @@ def selection_score(metrics: dict, params: dict) -> float:
     return score
 
 
-def run_sweep(params: dict, only: list[str] | None = None, out_dir: Path = ARTIFACTS, log=print) -> dict:
+def run_sweep(params: dict, only: list[str] | None = None, out_dir: Path = ARTIFACTS, log=ci_notice) -> dict:
     strict = os.environ.get("MEDRAG_STRICT") == "1"
     chunks = read_jsonl(DATA_PROCESSED / "chunks.jsonl")
     stats = json.loads((DATA_PROCESSED / "stats.json").read_text())
@@ -112,7 +113,9 @@ def run_sweep(params: dict, only: list[str] | None = None, out_dir: Path = ARTIF
             if skipped:
                 mlflow.set_tag("skipped_candidates", json.dumps(skipped))
             for name, retriever in fitted.items():
+                t_eval = time.time()
                 metrics, per_query = evaluate_all(retriever, sets, chunk_pair)
+                log(f"evaluated {name} in {time.time() - t_eval:.1f}s")
                 metrics["fit_seconds"] = retriever.fit_seconds
                 score = selection_score(metrics, params)
                 with mlflow.start_run(run_name=name, nested=True) as run:
@@ -138,7 +141,9 @@ def run_sweep(params: dict, only: list[str] | None = None, out_dir: Path = ARTIF
                         "corpus_sha1": stats["corpus_sha1"], "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                         "metrics": best["metrics"], "params": {"chunking": params["chunking"]},
                         "monitoring": reference["thresholds"]}
+            t_save = time.time()
             Bundle(manifest, chunks, fitted[best["name"]]).save(bundle_dir)
+            log(f"saved challenger bundle ({best['name']}) in {time.time() - t_save:.1f}s")
             # Reference queries travel with the model so monitoring can compare production against them
             with open(bundle_dir / "reference_queries.jsonl", "w") as f:
                 for row in reference["rows"]:

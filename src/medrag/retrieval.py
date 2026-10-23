@@ -144,9 +144,25 @@ class FastEmbedRetriever(Retriever):
         return self._m
 
     def fit(self, texts):
-        vecs = np.array(list(self._model().passage_embed(texts, batch_size=64)), dtype=np.float32)
+        """Embed every passage. Results are cached on disk by (model, corpus) hash, because
+        embedding ~29k passages on a CPU runner is the slowest step of the whole pipeline."""
+        import hashlib
+        import os
+        model = self.config.get("model", "BAAI/bge-small-en-v1.5")
+        h = hashlib.sha1(model.encode())
+        for t in texts:
+            h.update(t.encode("utf-8"))
+        cache_dir = Path(os.environ.get("MEDRAG_EMB_CACHE", Path.home() / ".cache" / "medrag-embeddings"))
+        cache = cache_dir / f"{h.hexdigest()[:20]}.npy"
+        if cache.exists():
+            self.emb = np.load(cache)
+            return self
+        parallel = 0 if len(texts) > 2000 else None  # 0 = one worker process per CPU core
+        vecs = np.array(list(self._model().passage_embed(texts, batch_size=64, parallel=parallel)), dtype=np.float32)
         vecs /= np.linalg.norm(vecs, axis=1, keepdims=True) + 1e-9
         self.emb = vecs.astype(np.float16)
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        np.save(cache, self.emb)
         return self
 
     def encode(self, queries):
@@ -199,7 +215,7 @@ def build_retrievers(candidates: list[dict], texts: list[str], depth: int, log=p
         t0 = time.time()
         built[cand["name"]] = KINDS[cand["kind"]](cand["name"], cand).fit(texts)
         built[cand["name"]].fit_seconds = time.time() - t0
-        log(f"  fitted {cand['name']} in {built[cand['name']].fit_seconds:.1f}s")
+        log(f"fitted {cand['name']} in {built[cand['name']].fit_seconds:.1f}s")
     for cand in candidates:
         if cand["kind"] == "hybrid":
             cfg = {**cand, "candidate_depth": depth}
