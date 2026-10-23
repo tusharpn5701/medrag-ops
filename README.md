@@ -48,14 +48,17 @@ Ask a consumer health question ("my dad has high blood pressure, what should he 
 
 ### Results so far
 
+From the first full training run on GitHub Actions (October 2026):
+
 | Retriever | MedQuAD recall@5 | LiveQA val nDCG@10 | LiveQA test nDCG@10 |
 |---|---|---|---|
-| **BM25** (current champion) | 0.778 | 0.233 | 0.423 |
-| LSA-256, trained on this corpus | 0.261 | 0.144 | 0.153 |
-| Hybrid BM25 + LSA (RRF) | 0.504 | 0.215 | 0.296 |
-| bge-small (pretrained ONNX) and hybrid BM25 + bge | scored in CI | | |
+| **bge-small** (pretrained ONNX, current champion v1) | 0.951 | 0.403 | 0.443 |
+| BM25 | 0.779 | 0.233 | 0.424 |
+| LSA-256, trained on this corpus | 0.259 | 0.143 | 0.156 |
 
-BM25 is a strong baseline here because medical questions hinge on exact disease names. The corpus-trained LSA model blurs those names together, and fusing it in hurts. The sweep and the gate catch this without a human in the loop: in testing, an LSA challenger was registered but blocked by both guardrails.
+Hybrid candidates (BM25 + LSA, BM25 + bge) are scored in every run and logged to MLflow.
+
+The pretrained embedding model wins clearly on validation, which is what selection uses, and edges BM25 on the held-out test split. BM25 stays a strong baseline because medical questions hinge on exact disease names. The corpus-trained LSA model blurs those names together, and fusing it in hurts. The gate handles both cases without a human in the loop: a retrain on unchanged data produced an identical bge model, which was registered as v2 but not promoted, and in local testing an LSA challenger was blocked by both guardrails.
 
 ### Drift detection, explained
 
@@ -69,6 +72,7 @@ dvc repro                     # download -> prepare -> train -> register (local 
 medrag export                 # champion bundle -> artifacts/bundle
 medrag serve                  # http://localhost:8000 (demo page, /docs for the API)
 pytest && ruff check src tests
+medrag doctor                 # checks MLflow, the log bucket, the LLM key and embedding speed
 mlflow ui --backend-store-uri sqlite:///mlflow.db
 ```
 
@@ -103,6 +107,7 @@ Set `GROQ_API_KEY` to get LLM answers; without it the service uses extractive an
 * **Unjudged answers count as non-relevant**, as in TREC pooling, so absolute scores understate quality.
 * **LLM-judged production labels** are pooled from the current champion only, so they favour it. They inform selection; the NIH-judged test split alone decides promotion.
 * **Retrieval confidence** is the best hit's BM25 score against the 10th percentile of reference queries. On a 25-question off-topic probe it separates off-topic from medical questions with AUC 0.91, which is useful as a monitoring signal but not as a hard refusal rule.
+* **Embedding cost:** embedding the 28,844 passages with bge-small takes most of an hour on a free GitHub runner, so embeddings are cached by (model, corpus) hash between runs. Retraining is fast until the corpus changes.
 * **Free-tier trade-offs:** Render's free instance sleeps after 15 minutes, so the first request can take a minute. Request logs are batched to the bucket every 25 requests or 60 seconds and on shutdown, and the monitor flushes the live service before it reads.
 * **Registry roles** use MLflow aliases where the server supports them and fall back to version tags otherwise.
 * **Privacy:** emails and phone numbers are stripped before any query is logged. The demo asks users not to enter personal details.
