@@ -75,9 +75,15 @@ def run_doctor(embed_sample: int = 500) -> int:
         if not key:
             raise RuntimeError("GROQ_API_KEY is not set")
         p = load_params()["generation"]
+        from .generate import reasoning_extra
         r = OpenAI(api_key=key, base_url=p["base_url"], timeout=30).chat.completions.create(
-            model=p["model"], max_tokens=20, messages=[{"role": "user", "content": "Reply with the word ready."}])
-        return f"{p['model']} replied: {(r.choices[0].message.content or '').strip()[:40]!r}"
+            model=p["model"], max_tokens=p.get("max_tokens", 1024),
+            extra_body=reasoning_extra(p["model"], p.get("reasoning_effort")) or None,
+            messages=[{"role": "user", "content": "Reply with the word ready."}])
+        text = (r.choices[0].message.content or "").strip()
+        if not text:
+            raise RuntimeError(f"{p['model']} returned an empty answer (finish_reason={r.choices[0].finish_reason})")
+        return f"{p['model']} replied: {text[:40]!r}"
 
     def embedding_speed():
         from fastembed import TextEmbedding

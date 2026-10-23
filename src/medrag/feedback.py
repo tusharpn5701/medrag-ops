@@ -20,6 +20,7 @@ from pathlib import Path
 
 from .config import ARTIFACTS, FEEDBACK_FILE, get_settings
 from .data import read_jsonl, write_jsonl
+from .generate import reasoning_extra
 from .logsink import _s3, load_logs
 from .retrieval import Bundle
 from .text import norm_key, sha1
@@ -100,7 +101,10 @@ def label_production_queries(params: dict, logs_dir: str | None, limit: int = 40
         passages = "\n".join(f"[{i + 1}] {h['focus']}: {' '.join(h['body'].split()[:120])}" for i, h in enumerate(hits))
         try:
             resp = client.chat.completions.create(
-                model=params["generation"]["model"], temperature=0, max_tokens=200,
+                model=params["generation"]["model"], temperature=0,
+                max_tokens=params["generation"].get("max_tokens", 1024),
+                extra_body=reasoning_extra(params["generation"]["model"],
+                                           params["generation"].get("reasoning_effort")) or None,
                 messages=[{"role": "user", "content": JUDGE_PROMPT.format(question=q, passages=passages)}])
             grades = parse_grades(resp.choices[0].message.content, len(hits))
         except Exception:

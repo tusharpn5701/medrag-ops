@@ -35,7 +35,9 @@ class Settings(BaseSettings):
     llm_api_key: str | None = None
     llm_base_url: str = "https://api.groq.com/openai/v1"
     llm_model: str = "openai/gpt-oss-20b"
-    llm_timeout_s: float = 20.0
+    llm_timeout_s: float = 30.0
+    llm_max_tokens: int = 1024
+    llm_reasoning_effort: str | None = "low"   # sent to reasoning models such as gpt-oss; empty string disables
     prompt_path: Path = ROOT / "prompts" / "answer_v1.yaml"
 
     # request logging

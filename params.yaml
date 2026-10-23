@@ -37,8 +37,9 @@ generation:
   base_url: https://api.groq.com/openai/v1
   model: openai/gpt-oss-20b
   prompt: prompts/answer_v1.yaml
-  max_tokens: 500
+  max_tokens: 1024             # reasoning models spend part of this before the visible answer
   temperature: 0.1
+  reasoning_effort: low        # gpt-oss on Groq: low | medium | high
 
 monitoring:
   window_days: 7

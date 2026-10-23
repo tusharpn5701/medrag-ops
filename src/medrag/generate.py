@@ -83,11 +83,20 @@ def extractive_answer(question: str, hits: list[dict], max_sentences: int = 4) -
     return Answer(text, sorted({t[1] + 1 for t in best}), "extractive")
 
 
+def reasoning_extra(model: str, effort: str | None) -> dict:
+    """Groq's gpt-oss models think before answering; keep that short and out of the reply."""
+    if effort and "gpt-oss" in model:
+        return {"reasoning_effort": effort, "include_reasoning": False}
+    return {}
+
+
 class Generator:
     def __init__(self, prompt: Prompt, api_key: str | None, base_url: str, model: str,
-                 timeout_s: float = 20.0, max_tokens: int = 500, temperature: float = 0.1):
+                 timeout_s: float = 30.0, max_tokens: int = 1024, temperature: float = 0.1,
+                 reasoning_effort: str | None = "low"):
         self.prompt, self.model = prompt, model
         self.max_tokens, self.temperature = max_tokens, temperature
+        self.extra_body = reasoning_extra(model, reasoning_effort)
         self.client = None
         if api_key:
             from openai import OpenAI
@@ -107,6 +116,7 @@ class Generator:
             try:
                 resp = self.client.chat.completions.create(
                     model=self.model, temperature=self.temperature, max_tokens=self.max_tokens,
+                    extra_body=self.extra_body or None,
                     messages=[{"role": "system", "content": self.prompt.system},
                               {"role": "user", "content": self.prompt.user.format(
                                   question=question, passages=format_passages(hits))}])

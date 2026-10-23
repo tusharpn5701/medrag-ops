@@ -51,7 +51,8 @@ async def lifespan(app: FastAPI):
     STATE["bundle"] = Bundle.load(s.bundle_dir) if (Path(s.bundle_dir) / "manifest.json").exists() else None
     prompt = Prompt.load(s.prompt_path)
     STATE["prompt"] = prompt
-    STATE["generator"] = Generator(prompt, s.llm_api_key, s.llm_base_url, s.llm_model, s.llm_timeout_s)
+    STATE["generator"] = Generator(prompt, s.llm_api_key, s.llm_base_url, s.llm_model, s.llm_timeout_s,
+                                   max_tokens=s.llm_max_tokens, reasoning_effort=s.llm_reasoning_effort or None)
     STATE["logger"] = RequestLogger(s.log_dir, s.log_bucket, s.log_prefix, s.s3_endpoint_url,
                                     s.log_flush_records, s.log_flush_seconds)
     STATE["started"] = time.time()
