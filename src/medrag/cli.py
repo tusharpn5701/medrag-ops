@@ -33,6 +33,7 @@ def main(argv: list[str] | None = None) -> int:
     g = sub.add_parser("gate", help="fail if the challenger's metrics drop below reports/baseline.json")
     g.add_argument("--baseline", default="reports/baseline.json")
     sub.add_parser("summary", help="markdown summary of the last sweep/promotion (for CI job summaries)")
+    sub.add_parser("doctor", help="check MLflow, the log bucket, the LLM and embedding speed")
     sim = sub.add_parser("simulate", help="send realistic questions to a running API")
     sim.add_argument("--url", required=True)
     sim.add_argument("--n", type=int, default=60)
@@ -69,6 +70,9 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(label_production_queries(params, a.logs, a.limit), indent=2))
     elif a.cmd == "gate":
         return quality_gate(Path(a.baseline))
+    elif a.cmd == "doctor":
+        from .doctor import run_doctor
+        return run_doctor()
     elif a.cmd == "summary":
         print(markdown_summary())
     elif a.cmd == "simulate":
