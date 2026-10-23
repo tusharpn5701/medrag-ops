@@ -39,7 +39,23 @@ env:
   MLFLOW_DISABLE_AGENT_HINT: "1"
 
 jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - id: check
+        env:
+          URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+        run: |
+          if [ -n "$URI" ]; then echo "ready=true" >> "$GITHUB_OUTPUT"; else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping: add the MLflow (DagsHub) secrets to enable this workflow. See README, Deploying your own copy."
+          fi
+
   monitor:
+    needs: preflight
+    if: needs.preflight.outputs.ready == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -58,7 +74,8 @@ jobs:
           medrag simulate --url "$PUBLIC_URL" --n "${{ github.event.inputs.simulate }}" --mix "${{ github.event.inputs.mix }}"
       - name: Flush buffered logs from the live API
         if: env.PUBLIC_URL != '' && env.MEDRAG_ADMIN_TOKEN != ''
-        run: curl -s -X POST -H "x-admin-token: $MEDRAG_ADMIN_TOKEN" "$PUBLIC_URL/admin/flush" || true
+        run: |
+          curl -s -X POST -H "x-admin-token: $MEDRAG_ADMIN_TOKEN" "$PUBLIC_URL/admin/flush" || true
       - name: Build the monitoring report
         id: report
         run: |

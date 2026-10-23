@@ -30,7 +30,23 @@ env:
   MLFLOW_DISABLE_AGENT_HINT: "1"
 
 jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - id: check
+        env:
+          URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+        run: |
+          if [ -n "$URI" ]; then echo "ready=true" >> "$GITHUB_OUTPUT"; else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping: add the MLflow (DagsHub) secrets to enable this workflow. See README, Deploying your own copy."
+          fi
+
   deploy:
+    needs: preflight
+    if: needs.preflight.outputs.ready == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -43,7 +59,6 @@ jobs:
       - name: Export the champion bundle from the registry
         id: model
         run: |
-          if [ -z "$MLFLOW_TRACKING_URI" ]; then echo "::error::MLflow secrets are not set"; exit 1; fi
           medrag export --role champion --out artifacts/bundle
           echo "version=$(python -c "import json; print(json.load(open('artifacts/bundle/manifest.json'))['model_version'].split('/v')[-1])")" >> "$GITHUB_OUTPUT"
           echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
