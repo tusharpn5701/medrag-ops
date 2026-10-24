@@ -1,16 +1,16 @@
 {
-  "generated_at": "2026-10-23T13:36:42Z",
+  "generated_at": "2026-10-24T05:47:46Z",
   "window_days": 7,
   "model_version": "medrag-retriever/v1",
-  "retriever": "bm25",
+  "retriever": "bge-small",
   "n_queries": 0,
   "n_simulated": 0,
   "daily": {},
   "daily_simulated": {},
-  "low_confidence_threshold": 6.822268486022949,
+  "low_confidence_threshold": 0.8156233251094818,
   "reference": {
     "n": 1020,
-    "top_score_median": 11.229045867919922,
+    "top_score_median": 0.8661210536956787,
     "query_words_median": 8.0
   },
   "feedback": {
