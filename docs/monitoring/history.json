@@ -43,5 +43,14 @@
   "latency_p95_ms": null,
   "model_version": "medrag-retriever/v1",
   "drift_auc": null
+ },
+ {
+  "generated_at": "2026-10-29T05:19:42Z",
+  "status": "insufficient_data",
+  "n_queries": 0,
+  "low_confidence_rate": null,
+  "latency_p95_ms": null,
+  "model_version": "medrag-retriever/v1",
+  "drift_auc": null
  }
 ]
