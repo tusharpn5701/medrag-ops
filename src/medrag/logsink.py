@@ -31,6 +31,7 @@ class RequestLogger:
         self._last_flush = time.time()
         self.uploaded_batches = 0
         self.upload_errors = 0
+        self.last_error: str | None = None
         self._stop = threading.Event()
         self._thread = None
         if bucket:
@@ -64,8 +65,9 @@ class RequestLogger:
         try:
             _s3(self.endpoint_url).put_object(Bucket=self.bucket, Key=key, Body=body.encode())
             self.uploaded_batches += 1
-        except Exception:
+        except Exception as e:
             self.upload_errors += 1
+            self.last_error = f"{type(e).__name__}: {str(e)[:300]}"
             with self._lock:           # keep the records for the next attempt
                 self._buf = batch + self._buf
         return len(batch)

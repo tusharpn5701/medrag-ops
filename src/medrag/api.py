@@ -11,6 +11,7 @@ Endpoints
 """
 from __future__ import annotations
 
+import os
 import time
 import uuid
 from collections import defaultdict, deque
@@ -208,7 +209,14 @@ def admin_flush(x_admin_token: str | None = Header(None)):
     if not token or x_admin_token != token:
         raise HTTPException(401, "admin token required")
     lg = STATE["logger"]
-    return {"flushed": lg.flush(), "uploaded_batches": lg.uploaded_batches, "upload_errors": lg.upload_errors}
+    s = STATE["settings"]
+    return {"flushed": lg.flush(), "uploaded_batches": lg.uploaded_batches, "upload_errors": lg.upload_errors,
+            "last_error": lg.last_error,
+            # which settings are present (never their values), to debug a misconfigured host
+            "config": {"bucket": s.log_bucket, "endpoint_url": s.s3_endpoint_url,
+                       "aws_access_key_id_set": bool(os.environ.get("AWS_ACCESS_KEY_ID")),
+                       "aws_secret_access_key_set": bool(os.environ.get("AWS_SECRET_ACCESS_KEY")),
+                       "aws_default_region": os.environ.get("AWS_DEFAULT_REGION")}}
 
 
 @app.exception_handler(HTTPException)
