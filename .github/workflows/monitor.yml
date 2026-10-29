@@ -71,15 +71,18 @@ jobs:
         if: github.event.inputs.simulate != '' && github.event.inputs.simulate != '0' && env.PUBLIC_URL != ''
         run: |
           curl -s --max-time 90 "$PUBLIC_URL/health" || true   # wake the free instance
-          medrag simulate --url "$PUBLIC_URL" --n "${{ github.event.inputs.simulate }}" --mix "${{ github.event.inputs.mix }}"
+          medrag simulate --url "$PUBLIC_URL" --n "${{ github.event.inputs.simulate }}" --mix "${{ github.event.inputs.mix }}" | tee sim.json
+          echo "::notice title=monitor::simulated traffic against $PUBLIC_URL: $(python -c "import json; print(json.load(open('sim.json')))")"
+          echo "::notice title=monitor::health: $(curl -s --max-time 30 "$PUBLIC_URL/health")"
       - name: Flush buffered logs from the live API
         if: env.PUBLIC_URL != '' && env.MEDRAG_ADMIN_TOKEN != ''
         run: |
-          curl -s -X POST -H "x-admin-token: $MEDRAG_ADMIN_TOKEN" "$PUBLIC_URL/admin/flush" || true
+          echo "::notice title=monitor::flush: $(curl -s -X POST -H "x-admin-token: $MEDRAG_ADMIN_TOKEN" "$PUBLIC_URL/admin/flush" || true)"
       - name: Build the monitoring report
         id: report
         run: |
           medrag monitor --out docs/monitoring | tee monitor.json
+          echo "::notice title=monitor::$(python -c "import json; r=json.load(open('docs/monitoring/report.json')); print(r['status'], r['n_queries'], 'queries;', '; '.join(r['reasons'] + r['alerts']))")"
           echo "retrain=$(python -c "import json; print(str(json.load(open('docs/monitoring/report.json'))['retrain_recommended']).lower())")" >> "$GITHUB_OUTPUT"
           python - >> "$GITHUB_STEP_SUMMARY" <<'EOF'
           import json

@@ -88,6 +88,7 @@ jobs:
         run: |
           tag=$(python -c "import urllib.parse; print(urllib.parse.quote('${{ steps.model.outputs.image }}:${{ github.sha }}', safe=''))")
           curl -fsS -X POST "${RENDER_DEPLOY_HOOK_URL}&imgURL=${tag}"
+          echo "::notice title=deploy::Render deploy hook accepted image tag ${{ github.sha }}"
       - name: Wait until the new model is live
         if: env.PUBLIC_URL != '' && env.RENDER_DEPLOY_HOOK_URL != ''
         run: |
@@ -95,10 +96,13 @@ jobs:
           for i in $(seq 1 60); do
             got=$(curl -s --max-time 30 "$PUBLIC_URL/health" | python -c "import json,sys; print(json.load(sys.stdin).get('model_version'))" 2>/dev/null || true)
             echo "live: $got  wanted: $want"
-            [ "$got" = "$want" ] && exit 0
+            if [ "$got" = "$want" ]; then
+              echo "::notice title=deploy::$PUBLIC_URL is serving $want"
+              exit 0
+            fi
             sleep 15
           done
-          echo "::warning::Render has not switched to $want yet"
+          echo "::warning title=deploy::$PUBLIC_URL has not switched to $want yet (last seen: $got)"
       - name: Summary
         run: |
           echo "Deployed **medrag-retriever v${{ steps.model.outputs.version }}** as \`${{ steps.model.outputs.image }}:${{ github.sha }}\` (${{ github.event.inputs.reason || github.event_name }})" >> "$GITHUB_STEP_SUMMARY"
