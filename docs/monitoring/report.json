@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-01T05:45:42Z",
+  "generated_at": "2026-11-02T05:45:43Z",
   "window_days": 7,
   "model_version": "medrag-retriever/v1",
   "retriever": "bge-small",
