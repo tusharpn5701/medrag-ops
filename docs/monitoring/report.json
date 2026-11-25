@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-25T10:33:41Z",
+  "generated_at": "2026-11-25T10:36:41Z",
   "window_days": 7,
   "model_version": "medrag-retriever/v1",
   "retriever": "bge-small",
@@ -21,6 +21,8 @@
   "low_confidence_rate": 0.9555555555555556,
   "latency_p50_ms": 9332.0,
   "latency_p95_ms": 11342.76,
+  "retrieval_p95_ms": 4237.5999999999985,
+  "answer_p95_ms": 11342.76,
   "llm_fallback_rate": 0.022222222222222223,
   "llm_share": 0.9777777777777777,
   "query_words_median": 20.0,
@@ -174,7 +176,7 @@
     "low-confidence rate 96% > 25%"
   ],
   "alerts": [
-    "p95 latency 11343 ms > 1500 ms",
+    "p95 retrieval latency 4238 ms > 1500 ms",
     "LLM fallback rate 2% (provider errors or rate limits)"
   ]
 }
