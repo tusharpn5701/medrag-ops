@@ -18,6 +18,10 @@ COPY src ./src
 COPY prompts ./prompts
 RUN pip install --no-deps . && useradd --create-home --uid 10001 app
 COPY artifacts/bundle ./artifacts/bundle
+# Where request logs go. Neither value is a secret (the access keys stay in the host's env),
+# so they are baked in at build time; env vars set on the host still take precedence.
+ARG S3_ENDPOINT_URL=""
+ENV MEDRAG_S3_ENDPOINT_URL=${S3_ENDPOINT_URL} AWS_DEFAULT_REGION=us-east-1
 # Fetch any pretrained embedding model at build time so the container starts offline
 RUN python -c "from medrag.retrieval import Bundle; Bundle.load('artifacts/bundle').search('warm up', 1)" \
     && mkdir -p /app/logs /app/.cache && chown -R app /app/logs /app/.cache

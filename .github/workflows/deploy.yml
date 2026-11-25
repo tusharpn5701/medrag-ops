@@ -63,7 +63,9 @@ jobs:
           echo "version=$(python -c "import json; print(json.load(open('artifacts/bundle/manifest.json'))['model_version'].split('/v')[-1])")" >> "$GITHUB_OUTPUT"
           echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
       - name: Build image
-        run: docker build -t "${{ steps.model.outputs.image }}:${{ github.sha }}" .
+        env:
+          S3_ENDPOINT_URL: ${{ secrets.MEDRAG_S3_ENDPOINT_URL }}
+        run: docker build --build-arg S3_ENDPOINT_URL="$S3_ENDPOINT_URL" -t "${{ steps.model.outputs.image }}:${{ github.sha }}" .
       - name: Smoke test with 512 MB of memory
         run: |
           docker run -d --name api --memory 512m -p 8000:8000 "${{ steps.model.outputs.image }}:${{ github.sha }}"

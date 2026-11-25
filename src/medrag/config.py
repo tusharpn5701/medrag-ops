@@ -56,4 +56,6 @@ def get_settings() -> Settings:
     # Accept the provider's usual variable name as well
     if s.llm_api_key is None and os.environ.get("GROQ_API_KEY"):
         s.llm_api_key = os.environ["GROQ_API_KEY"]
+    if not s.s3_endpoint_url:          # an empty build arg means "use the provider default"
+        s.s3_endpoint_url = None
     return s

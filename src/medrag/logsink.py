@@ -15,8 +15,11 @@ from pathlib import Path
 
 
 def _s3(endpoint_url: str | None):
+    import os
+
     import boto3
-    return boto3.client("s3", endpoint_url=endpoint_url or None)
+    region = os.environ.get("AWS_DEFAULT_REGION") or os.environ.get("AWS_REGION") or "us-east-1"
+    return boto3.client("s3", endpoint_url=endpoint_url or None, region_name=region)
 
 
 class RequestLogger:
