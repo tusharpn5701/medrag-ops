@@ -47,5 +47,6 @@ monitoring:
   drift_auc_threshold: 0.75     # domain-classifier ROC AUC above this = query drift
   low_confidence_quantile: 0.10 # reference top-score quantile used as the "unsure" threshold
   max_low_confidence_rate: 0.25
-  max_p95_latency_ms: 1500
+  max_p95_retrieval_ms: 1500   # embedding + search, the part this service controls
+  max_p95_answer_ms: 15000     # end to end /ask, dominated by the hosted LLM
   max_error_rate: 0.02

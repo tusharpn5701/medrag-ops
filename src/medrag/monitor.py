@@ -85,6 +85,9 @@ def compute_report(params: dict, logs: list[dict], reference: list[dict], manife
             "top_score_median": _q([r.get("top_score", 0.0) for r in traffic], 0.5),
             "low_confidence_rate": float(np.mean([r.get("low_confidence", False) for r in traffic])),
             "latency_p50_ms": _q(lat, 0.5), "latency_p95_ms": _q(lat, 0.95),
+            # Retrieval is what this service controls; answer time is mostly the LLM provider
+            "retrieval_p95_ms": _q([r.get("retrieval_ms", r.get("latency_ms", 0)) for r in traffic], 0.95),
+            "answer_p95_ms": _q([r.get("latency_ms", 0) for r in asks], 0.95) if asks else None,
             "llm_fallback_rate": float(np.mean([bool(r.get("gen_error")) for r in asks])) if asks else None,
             "llm_share": float(np.mean([r.get("gen_mode") == "llm" for r in asks])) if asks else None,
             "query_words_median": _q([len(r["query"].split()) for r in traffic], 0.5),
@@ -111,8 +114,12 @@ def compute_report(params: dict, logs: list[dict], reference: list[dict], manife
         if rep["feedback"]["down_rate"] is not None and ups + downs >= 10 and rep["feedback"]["down_rate"] > 0.3:
             retrain = True
             reasons.append(f"thumbs-down rate {rep['feedback']['down_rate']:.0%} on {ups + downs} ratings")
-        if rep["latency_p95_ms"] > m["max_p95_latency_ms"]:
-            alerts.append(f"p95 latency {rep['latency_p95_ms']:.0f} ms > {m['max_p95_latency_ms']} ms")
+        max_ret = m.get("max_p95_retrieval_ms", m.get("max_p95_latency_ms", 1500))
+        if rep["retrieval_p95_ms"] > max_ret:
+            alerts.append(f"p95 retrieval latency {rep['retrieval_p95_ms']:.0f} ms > {max_ret} ms")
+        max_ans = m.get("max_p95_answer_ms")
+        if max_ans and rep["answer_p95_ms"] is not None and rep["answer_p95_ms"] > max_ans:
+            alerts.append(f"p95 answer latency {rep['answer_p95_ms']:.0f} ms > {max_ans} ms")
         if rep.get("llm_fallback_rate") and rep["llm_fallback_rate"] > m["max_error_rate"]:
             alerts.append(f"LLM fallback rate {rep['llm_fallback_rate']:.0%} (provider errors or rate limits)")
         status = "retrain" if retrain else ("alert" if alerts else "healthy")
@@ -139,7 +146,7 @@ def run_monitor(params: dict, logs_dir: str | None, out_dir: Path) -> dict:
     hist_path = out_dir / "history.json"
     history = json.loads(hist_path.read_text()) if hist_path.exists() else []
     history.append({k: rep.get(k) for k in ("generated_at", "status", "n_queries", "low_confidence_rate",
-                                            "latency_p95_ms", "model_version")} | {"drift_auc": rep.get("drift", {}).get("auc")})
+                                            "latency_p95_ms", "retrieval_p95_ms", "answer_p95_ms", "model_version")} | {"drift_auc": rep.get("drift", {}).get("auc")})
     history = history[-90:]
     hist_path.write_text(json.dumps(history, indent=1))
     promotion = ROOT / "reports" / "promotion.json"
@@ -221,7 +228,7 @@ def render_dashboard(rep: dict, history: list[dict], promo: dict | None) -> str:
     kpis = [("Queries", num(rep["n_queries"]), f"{rep['n_simulated']} simulated"),
             ("Low confidence", pct(rep.get("low_confidence_rate")), f"best hit under {rep['low_confidence_threshold']:.2f}"),
             ("Drift AUC", "–" if "drift" not in rep else f"{rep['drift']['auc']:.2f}", f"alert above {rep['drift']['threshold'] if 'drift' in rep else '0.75'}"),
-            ("p95 latency", num(rep.get("latency_p95_ms"), " ms"), f"p50 {num(rep.get('latency_p50_ms'), ' ms')}"),
+            ("p95 retrieval", num(rep.get("retrieval_p95_ms"), " ms"), f"full answers p95 {num(rep.get('answer_p95_ms'), ' ms')}"),
             ("LLM answers", pct(rep.get("llm_share")), f"fallbacks {pct(rep.get('llm_fallback_rate'))}"),
             ("Thumbs down", pct(rep["feedback"]["down_rate"]), f"{rep['feedback']['up'] + rep['feedback']['down']} ratings")]
     terms = ""

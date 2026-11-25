@@ -107,7 +107,9 @@ jobs:
           last=$(gh run list --workflow train.yml --limit 1 --json createdAt -q '.[0].createdAt' || true)
           if [ -n "$last" ] && [ $(( $(date +%s) - $(date -d "$last" +%s) )) -lt 259200 ]; then
             echo "Training ran at $last, within the 3-day cooldown" >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice title=monitor::retrain recommended but skipped: training last ran at $last (3-day cooldown)"
           else
             gh workflow run train.yml -f reason="monitor: $(python -c "import json; print('; '.join(json.load(open('docs/monitoring/report.json'))['reasons']))")"
             echo "Retraining triggered" >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice title=monitor::retraining triggered"
           fi

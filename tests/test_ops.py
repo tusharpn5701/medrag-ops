@@ -12,7 +12,7 @@ from medrag.registry import _decide
 
 PARAMS = {
     "monitoring": {"window_days": 7, "min_queries": 30, "drift_auc_threshold": 0.75,
-                   "max_low_confidence_rate": 0.25, "max_p95_latency_ms": 1500, "max_error_rate": 0.02},
+                   "max_low_confidence_rate": 0.25, "max_p95_retrieval_ms": 1500, "max_p95_answer_ms": 15000, "max_error_rate": 0.02},
     "promotion": {"metric": "liveqa_test/ndcg@10", "min_improvement": 0.0,
                   "guardrails": {"medquad/recall@5": 0.7}},
 }
