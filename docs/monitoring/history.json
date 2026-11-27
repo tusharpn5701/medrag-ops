@@ -344,5 +344,16 @@
   "answer_p95_ms": 11342.76,
   "model_version": "medrag-retriever/v1",
   "drift_auc": 0.9675555555555556
+ },
+ {
+  "generated_at": "2026-11-27T05:44:51Z",
+  "status": "retrain",
+  "n_queries": 45,
+  "low_confidence_rate": 0.9555555555555556,
+  "latency_p95_ms": 11342.76,
+  "retrieval_p95_ms": 4237.5999999999985,
+  "answer_p95_ms": 11342.76,
+  "model_version": "medrag-retriever/v1",
+  "drift_auc": 0.9675555555555556
  }
 ]
